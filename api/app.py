@@ -24,8 +24,7 @@ GROQ_API_KEY    = os.getenv("GROQ_API_KEY", "")
 BAILEYS_URL     = os.getenv("BAILEYS_URL", "http://baileys:3000")
 ALGORITHM       = "HS256"
 TOKEN_EXP       = 24  # horas
-DB_URL          = os.getenv("DATABASE_URL",
-    "postgresql://leanttro:Fin@2021@wpp-wpp-a3wnej:5432/postgres")
+DB_URL          = os.getenv("DATABASE_URL")
 REDIS_URL       = os.getenv("REDIS_URL", "redis://redis:6379")
 GROQ_API_URL    = "https://api.groq.com/openai/v1/chat/completions"
 GATILHOS_PARADA_PADRAO = ["não quero", "nao quero", "para", "chega", "sai", "remove", "cancelar"]
