@@ -1,0 +1,98 @@
+version: '3.8'
+
+services:
+
+  # ── BAILEYS — zero mudança em relação ao projeto WPP ──────────────────
+  baileys:
+    build:
+      context: .
+      dockerfile: Dockerfile.baileys
+    restart: always
+    ports:
+      - "3001:3000"
+    volumes:
+      - wpp_session:/app/auth_info_final
+    environment:
+      - API_WEBHOOK_URL=http://api:8000/webhook/mensagem
+      # TYPEBOT_URL removido — não usado no Speedio
+      - USUARIO_ID=${USUARIO_ID:-1}          # NOVO: multi-tenant futuro
+    networks:
+      - dokploy-network
+
+  # ── API — FastAPI principal ────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    restart: always
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - SECRET_KEY=${SECRET_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - SERPER_API_KEY=${SERPER_API_KEY}     # NOVO: busca leads + LinkedIn
+      - ADMIN_TOKEN=${ADMIN_TOKEN}           # NOVO: explicitado aqui
+      - BAILEYS_URL=http://baileys:3000
+      - REDIS_URL=redis://redis:6379
+    networks:
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.speedio-api.rule=Host(`api.leanttro.com`)"        # MUDOU domínio
+      - "traefik.http.routers.speedio-api.entrypoints=websecure"
+      - "traefik.http.routers.speedio-api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.speedio-api.loadbalancer.server.port=8000"
+
+  # ── ENRICHER — microserviço "Cloud Function" simulada ─────────────────
+  # Container independente: ReceitaWS + Serper LinkedIn + Groq score
+  enricher:                                  # NOVO serviço
+    build:
+      context: .
+      dockerfile: Dockerfile.enricher        # NOVO dockerfile
+    restart: always
+    depends_on:
+      - redis
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - SERPER_API_KEY=${SERPER_API_KEY}
+      - REDIS_URL=redis://redis:6379
+    networks:
+      - dokploy-network
+
+  # ── FRONTEND — React + Vite (era HTML estático) ───────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend        # vai mudar internamente pra Vite
+    restart: always
+    ports:
+      - "8080:80"
+    networks:
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.speedio-front.rule=Host(`app.leanttro.com`)"      # MUDOU domínio
+      - "traefik.http.routers.speedio-front.entrypoints=websecure"
+      - "traefik.http.routers.speedio-front.tls.certresolver=letsencrypt"
+      - "traefik.http.services.speedio-front.loadbalancer.server.port=80"
+
+  # ── REDIS — igual, zero mudança ───────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: always
+    volumes:
+      - redis_data:/data
+    networks:
+      - dokploy-network
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  wpp_session:
+  redis_data:
