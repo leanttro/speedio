@@ -12,6 +12,7 @@ import Campanhas from './pages/Campanhas';
 import Conversas from './pages/Conversas';
 import Chatbot from './pages/Chatbot';
 import Analytics from './pages/Analytics';
+import Admin from './pages/Admin';
 
 function PrivateRoute({ children }) {
   return localStorage.getItem('token') ? children : <Navigate to="/login" replace />;
@@ -23,6 +24,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/admin" element={<Admin />} />
         <Route
           path="/dashboard"
           element={
