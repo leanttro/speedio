@@ -847,6 +847,17 @@ def get_ai_config(user=Depends(get_current_user), conn=Depends(get_db)):
 @app.post("/ai-config")
 def salvar_ai_config(body: AIConfigBody, user=Depends(get_current_user), conn=Depends(get_db)):
     b = body.dict()
+    # Garante que campos opcionais vazios virem None (NULL no banco) em vez de string vazia
+    campos_texto = [
+        "persona_nome", "prompt_sistema", "modelo",
+        "produto_nome", "produto_descricao", "produto_preco",
+        "midia_abertura_url", "midia_abertura_tipo", "midia_abertura_caption",
+        "midia_fechamento_url", "midia_fechamento_tipo", "midia_fechamento_caption",
+        "gatilhos_parada", "horario_inicio", "horario_fim",
+    ]
+    for campo in campos_texto:
+        if b.get(campo) == "":
+            b[campo] = None
     db_exec(conn, """
         INSERT INTO ai_config (
             usuario_id, persona_nome, prompt_sistema, temperatura, modelo,
