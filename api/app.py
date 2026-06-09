@@ -332,8 +332,15 @@ async def processar_mensagem(payload: dict, conn):
         "SELECT * FROM conversations WHERE usuario_id=%s AND regexp_replace(jid, '@.*', '') LIKE %s ORDER BY criado_em DESC LIMIT 1",
         (usuario_id, f"%{sufixo_busca}"))
 
+    # Fallback: busca pelo JID exato (cobre @lid com dígitos completamente diferentes)
+    if not conv:
+        conv = db_one(conn,
+            "SELECT * FROM conversations WHERE usuario_id=%s AND jid=%s ORDER BY criado_em DESC LIMIT 1",
+            (usuario_id, jid))
+
     if not conv:
         print(f"🆕 Nova conversa para {numero_puro} (normalizado: {numero_puro_normalizado})")
+        # Busca contato pelos 9 dígitos finais
         contact = db_one(conn, "SELECT id FROM contacts WHERE usuario_id=%s AND telefone LIKE %s", (usuario_id, f"%{sufixo_busca}%"))
         contact_id = contact["id"] if contact else None
         # Se o contato não existe na base, ignora completamente — IA não responde desconhecidos
@@ -510,8 +517,10 @@ async def processar_contato_campanha(campaign_id: int, contact_id: int, usuario_
 
         agora = datetime.now().time()
         try:
-            h_ini = time.fromisoformat(str(cfg.get("horario_inicio", "08:00")))
-            h_fim = time.fromisoformat(str(cfg.get("horario_fim", "18:00")))
+            h_ini_raw = cfg.get("horario_inicio") or "08:00"
+            h_fim_raw = cfg.get("horario_fim") or "18:00"
+            h_ini = h_ini_raw if isinstance(h_ini_raw, time) else time.fromisoformat(str(h_ini_raw))
+            h_fim = h_fim_raw if isinstance(h_fim_raw, time) else time.fromisoformat(str(h_fim_raw))
             print(f"🕐 agora={agora} janela={h_ini}-{h_fim}")
             if not (h_ini <= agora <= h_fim):
                 print("⏰ Fora do horário — aguardando")
