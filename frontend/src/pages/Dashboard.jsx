@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import './dashboard.css';
 
@@ -18,10 +18,20 @@ const NAV_ITEMS = [
 export default function Dashboard() {
   const navigate = useNavigate();
   const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
 
   useEffect(() => {
     if (!localStorage.getItem('token')) navigate('/login');
   }, [navigate]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  function toggleTheme() {
+    setTheme(t => t === 'dark' ? 'light' : 'dark');
+  }
 
   function logout() {
     localStorage.clear();
@@ -35,10 +45,12 @@ export default function Dashboard() {
           <img
             src="https://speediojobs.vagas.solides.com.br/_next/image?url=https%3A%2F%2Fc5gwmsmjx1.execute-api.us-east-1.amazonaws.com%2Fprod%2Fdados_processo_seletivo%2Flogo_empresa%2F138561%2FIO%20(the%20last%20part%20of%20the%20logo)_AZUL.png&w=828&q=100"
             alt="Logo"
-            style={{ height: 28, marginBottom: 6, display: 'block' }}
           />
-          Leanttro Teste Speedio
+          <div className="sidebar-logo-name">
+            <span className="sidebar-logo-highlight">Leanttro Teste Speedio</span>
+          </div>
         </div>
+
         <nav className="sidebar-nav">
           {NAV_ITEMS.map(({ to, label }) => (
             <NavLink
@@ -50,9 +62,15 @@ export default function Dashboard() {
             </NavLink>
           ))}
         </nav>
+
         <div className="sidebar-user">
           <span>{user.nome || user.email || 'Usuário'}</span>
-          <button onClick={logout}>Sair</button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button className="theme-toggle" onClick={toggleTheme} title="Alternar tema">
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
+            <button onClick={logout}>Sair</button>
+          </div>
         </div>
       </aside>
 
