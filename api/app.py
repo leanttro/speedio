@@ -1504,11 +1504,11 @@ async def buscar_leads(body: LeadSearchBody, user=Depends(get_current_user), con
             try:
                 cur = conn.cursor()
                 cur.execute("""
-                    INSERT INTO leads (nome, telefone, endereco, bairro, cidade, nicho, place_id, maps_url, website, rating, lat, lng)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    INSERT INTO leads (nome, telefone, whatsapp, endereco, bairro, cidade, nicho, place_id, maps_url, website, rating, lat, lng)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                     ON CONFLICT (place_id) DO NOTHING
                     RETURNING id
-                """, (nome, telefone, endereco, bairro_final, cidade_final, body.nicho,
+                """, (nome, telefone, telefone, endereco, bairro_final, cidade_final, body.nicho,
                       place_id or nome, maps_url, website, rating, str(lat), str(lng)))
                 row = cur.fetchone()
                 conn.commit()
