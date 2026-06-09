@@ -1564,25 +1564,65 @@ def deletar_lead(lead_id: int, user=Depends(get_current_user), conn=Depends(get_
 
 
 # ─────────────────────────────────────────
-#  ROUTES — ENRICHER
+#  ROUTES — ENRICHER (direto, sem Redis)
 # ─────────────────────────────────────────
+
+async def _processar_lead(lead_id: int, conn):
+    import time as _t
+    lead = db_one(conn, "SELECT * FROM leads WHERE id=%s", (lead_id,))
+    if not lead:
+        return
+    lead = dict(lead)
+
+    # ReceitaWS
+    cnpj = lead.get("cnpj") or ""
+    dados_receita = {}
+    if cnpj:
+        dados_receita = buscar_cnpj(cnpj)
+        _t.sleep(1)
+
+    porte    = dados_receita.get("porte", "") or ""
+    socios   = dados_receita.get("qsa", []) or []
+    situacao = dados_receita.get("situacao", "") or ""
+    cnpj_ok  = dados_receita.get("cnpj", cnpj) or cnpj
+
+    # LinkedIn
+    linkedin_url = buscar_linkedin(lead.get("nome", ""), lead.get("cidade", ""))
+
+    # Score IA via Groq
+    score_data = await gerar_score_lead(lead, dados_receita, GROQ_API_KEY)
+
+    db_exec(conn, """
+        UPDATE leads SET
+            cnpj                = %s,
+            porte               = %s,
+            socios              = %s,
+            situacao_cadastral  = %s,
+            linkedin_url        = %s,
+            score_ia            = %s,
+            score_justificativa = %s,
+            mensagem_wpp        = %s,
+            status              = 'enriquecido',
+            enriched_at         = NOW(),
+            updated_at          = NOW()
+        WHERE id = %s
+    """, (cnpj_ok, porte, json.dumps(socios), situacao, linkedin_url,
+          score_data["score_ia"], score_data["score_justificativa"],
+          score_data["mensagem_wpp"], lead_id))
+
 
 @app.post("/enricher/enrich/{lead_id}")
 async def enriquecer_lead(lead_id: int, user=Depends(get_current_user), conn=Depends(get_db)):
-    """
-    Enfileira o lead para enriquecimento assíncrono.
-    O worker_enricher consome a fila e processa em background.
-    """
     lead = db_one(conn, "SELECT id FROM leads WHERE id=%s", (lead_id,))
     if not lead:
         raise HTTPException(404, "Lead não encontrado")
-
-    redis = await aioredis.from_url(REDIS_URL)
-    await redis.rpush("fila_enricher", json.dumps({"lead_id": lead_id}))
-    await redis.aclose()
-
     db_exec(conn, "UPDATE leads SET status='enriquecendo', updated_at=NOW() WHERE id=%s", (lead_id,))
-    return {"ok": True, "mensagem": f"Lead {lead_id} enfileirado para enriquecimento"}
+    try:
+        await _processar_lead(lead_id, conn)
+        return {"ok": True}
+    except Exception as e:
+        db_exec(conn, "UPDATE leads SET status='erro_enrichment', updated_at=NOW() WHERE id=%s", (lead_id,))
+        raise HTTPException(500, str(e))
 
 
 @app.post("/enricher/enrich-batch")
@@ -1592,22 +1632,24 @@ async def enriquecer_lote(
     user=Depends(get_current_user),
     conn=Depends(get_db)
 ):
-    """Enfileira todos os leads pendentes para enriquecimento."""
     filtros = ["status = 'pendente'"]
     params  = []
     if cidade: filtros.append("cidade ILIKE %s"); params.append(f"%{cidade}%")
     if nicho:  filtros.append("nicho  ILIKE %s"); params.append(f"%{nicho}%")
-
     where = "WHERE " + " AND ".join(filtros)
     leads = db_all(conn, f"SELECT id FROM leads {where}", params)
 
-    redis = await aioredis.from_url(REDIS_URL)
+    processados = 0
     for lead in leads:
-        await redis.rpush("fila_enricher", json.dumps({"lead_id": lead["id"]}))
-        db_exec(conn, "UPDATE leads SET status='enriquecendo', updated_at=NOW() WHERE id=%s", (lead["id"],))
-    await redis.aclose()
+        lid = lead["id"]
+        db_exec(conn, "UPDATE leads SET status='enriquecendo', updated_at=NOW() WHERE id=%s", (lid,))
+        try:
+            await _processar_lead(lid, conn)
+            processados += 1
+        except Exception as e:
+            db_exec(conn, "UPDATE leads SET status='erro_enrichment', updated_at=NOW() WHERE id=%s", (lid,))
 
-    return {"ok": True, "enfileirados": len(leads)}
+    return {"ok": True, "processados": processados, "total": len(leads)}
 
 
 @app.get("/enricher/status/{lead_id}")
