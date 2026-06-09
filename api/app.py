@@ -1194,6 +1194,25 @@ def extrair_coordenadas(lugar: dict) -> tuple:
             if lat and lng: return lat, lng
     return "", ""
 
+def buscar_place_details(place_id: str) -> dict:
+    """Busca telefone e website via Serper Places Details."""
+    if not place_id:
+        return {}
+    try:
+        r = httpx.post(
+            "https://google.serper.dev/maps",
+            headers={"X-API-KEY": SERPER_API_KEY, "Content-Type": "application/json"},
+            json={"q": f"place_id:{place_id}", "gl": "br", "hl": "pt-br"},
+            timeout=10,
+        )
+        if r.status_code == 200:
+            places = r.json().get("places", [])
+            if places:
+                return places[0]
+    except:
+        pass
+    return {}
+
 def buscar_maps(query: str) -> list:
     try:
         r = httpx.post(
@@ -1202,7 +1221,18 @@ def buscar_maps(query: str) -> list:
             json={"q": query, "gl": "br", "hl": "pt-br"},
             timeout=15,
         )
-        return r.json().get("places", []) if r.status_code == 200 else []
+        lugares = r.json().get("places", []) if r.status_code == 200 else []
+        # Para cada lugar sem telefone, tenta buscar detalhes pelo place_id
+        for lugar in lugares:
+            if not lugar.get("phoneNumber") and not lugar.get("phone"):
+                place_id = lugar.get("placeId") or lugar.get("place_id") or ""
+                if place_id:
+                    detalhes = buscar_place_details(place_id)
+                    if detalhes.get("phoneNumber"):
+                        lugar["phoneNumber"] = detalhes["phoneNumber"]
+                    if not lugar.get("website") and detalhes.get("website"):
+                        lugar["website"] = detalhes["website"]
+        return lugares
     except:
         return []
 
@@ -1506,7 +1536,11 @@ async def buscar_leads(body: LeadSearchBody, user=Depends(get_current_user), con
                 cur.execute("""
                     INSERT INTO leads (nome, telefone, whatsapp, endereco, bairro, cidade, nicho, place_id, maps_url, website, rating, lat, lng)
                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                    ON CONFLICT (place_id) DO NOTHING
+                    ON CONFLICT (place_id) DO UPDATE SET
+                        telefone   = CASE WHEN leads.telefone IS NULL OR leads.telefone = '' THEN EXCLUDED.telefone ELSE leads.telefone END,
+                        whatsapp   = CASE WHEN leads.whatsapp IS NULL OR leads.whatsapp = '' THEN EXCLUDED.whatsapp ELSE leads.whatsapp END,
+                        website    = CASE WHEN leads.website  IS NULL OR leads.website  = '' THEN EXCLUDED.website  ELSE leads.website  END,
+                        updated_at = NOW()
                     RETURNING id
                 """, (nome, telefone, telefone, endereco, bairro_final, cidade_final, body.nicho,
                       place_id or nome, maps_url, website, rating, str(lat), str(lng)))
