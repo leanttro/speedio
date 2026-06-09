@@ -2,8 +2,6 @@ import { useState, useEffect } from 'react';
 import { apiFetch } from '../lib/api';
 import { useToast } from '../hooks/useToast';
 
-const BAILEYS_URL = 'http://213.199.56.207:3002';
-
 export default function WhatsApp() {
   const toast = useToast();
   const [status, setStatus] = useState({ connected: false, number: '' });
@@ -17,7 +15,7 @@ export default function WhatsApp() {
       const d = await r.json();
       setStatus({ connected: d.connected, number: d.number || '' });
       if (!d.connected) {
-        const qrR = await fetch(`${BAILEYS_URL}/qrcode-json`);
+        const qrR = await apiFetch('/whatsapp/qrcode-json');
         const qrD = await qrR.json();
         setQr(qrD.qr || '');
       } else {
