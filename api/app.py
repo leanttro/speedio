@@ -342,6 +342,13 @@ async def processar_mensagem(payload: dict, conn):
         print(f"🆕 Nova conversa para {numero_puro} (normalizado: {numero_puro_normalizado})")
         # Busca contato pelos 9 dígitos finais
         contact = db_one(conn, "SELECT id FROM contacts WHERE usuario_id=%s AND telefone LIKE %s", (usuario_id, f"%{sufixo_busca}%"))
+        # Fallback: busca pelo pushName (cobre @lid cujos dígitos não batem com nenhum telefone cadastrado)
+        if not contact:
+            push_name = payload.get("pushName", "")
+            if push_name:
+                contact = db_one(conn, "SELECT id FROM contacts WHERE usuario_id=%s AND (nome ILIKE %s OR empresa ILIKE %s)", (usuario_id, f"%{push_name}%", f"%{push_name}%"))
+                if contact:
+                    print(f"✅ Contato encontrado pelo pushName '{push_name}'")
         contact_id = contact["id"] if contact else None
         # Se o contato não existe na base, ignora completamente — IA não responde desconhecidos
         if not contact_id:
@@ -519,8 +526,18 @@ async def processar_contato_campanha(campaign_id: int, contact_id: int, usuario_
         try:
             h_ini_raw = cfg.get("horario_inicio") or "08:00"
             h_fim_raw = cfg.get("horario_fim") or "18:00"
-            h_ini = h_ini_raw if isinstance(h_ini_raw, time) else time.fromisoformat(str(h_ini_raw))
-            h_fim = h_fim_raw if isinstance(h_fim_raw, time) else time.fromisoformat(str(h_fim_raw))
+            if isinstance(h_ini_raw, timedelta):
+                h_ini = (datetime.min + h_ini_raw).time()
+            elif isinstance(h_ini_raw, time):
+                h_ini = h_ini_raw
+            else:
+                h_ini = time.fromisoformat(str(h_ini_raw))
+            if isinstance(h_fim_raw, timedelta):
+                h_fim = (datetime.min + h_fim_raw).time()
+            elif isinstance(h_fim_raw, time):
+                h_fim = h_fim_raw
+            else:
+                h_fim = time.fromisoformat(str(h_fim_raw))
             print(f"🕐 agora={agora} janela={h_ini}-{h_fim}")
             if not (h_ini <= agora <= h_fim):
                 print("⏰ Fora do horário — aguardando")
