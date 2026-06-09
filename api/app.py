@@ -21,7 +21,7 @@ import redis.asyncio as aioredis
 # ─────────────────────────────────────────
 SECRET_KEY      = os.getenv("SECRET_KEY", "troca-isso-em-producao")
 GROQ_API_KEY    = os.getenv("GROQ_API_KEY", "")
-BAILEYS_URL     = os.getenv("BAILEYS_URL", "http://baileys:3000")
+BAILEYS_URL     = os.getenv("BAILEYS_URL", "http://baileys:3002")
 ALGORITHM       = "HS256"
 TOKEN_EXP       = 24  # horas
 DB_URL          = os.getenv("DATABASE_URL")
