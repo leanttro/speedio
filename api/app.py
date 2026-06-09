@@ -1025,6 +1025,15 @@ async def wpp_qrcode(user=Depends(get_current_user)):
     except:
         return {"qr": None}
 
+@app.get("/whatsapp/qrcode-json")
+async def wpp_qrcode_json(user=Depends(get_current_user)):
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(f"{BAILEYS_URL}/qrcode-json")
+            return r.json()
+    except:
+        return {"qr": None}
+
 # ─────────────────────────────────────────
 #  ANALYTICS
 # ─────────────────────────────────────────
