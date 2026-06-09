@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import '../dashboard.css';
+import './dashboard.css';
 
 const NAV_ITEMS = [
   { to: '/dashboard/whatsapp',    icon: '📱', label: 'WhatsApp' },
