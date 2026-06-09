@@ -157,9 +157,10 @@ export default function Enricher() {
                   <th>Telefone / WPP</th>
                   <th>Endereço</th>
                   <th>Bairro</th>
+                  <th>Cidade</th>
                   <th>Site</th>
-                  <th>CNPJ</th>
-                  <th>LinkedIn</th>
+                  <th>Rating</th>
+                  <th>Maps</th>
                   <th>Score IA</th>
                   <th>Justificativa</th>
                   <th>Mensagem WPP</th>
@@ -167,9 +168,9 @@ export default function Enricher() {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={10} className="empty-state">Carregando...</td></tr>
+                  <tr><td colSpan={11} className="empty-state">Carregando...</td></tr>
                 ) : leads.length === 0 ? (
-                  <tr><td colSpan={10} className="empty-state">Nenhum lead enriquecido ainda</td></tr>
+                  <tr><td colSpan={11} className="empty-state">Nenhum lead enriquecido ainda</td></tr>
                 ) : leads.map(l => (
                   <tr key={l.id}>
                     <td style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>{l.nome || '—'}</td>
@@ -178,15 +179,16 @@ export default function Enricher() {
                     </td>
                     <td style={{ color: '#aaa', fontSize: 12 }}><Truncated text={l.endereco} maxLen={40} /></td>
                     <td style={{ color: '#aaa', fontSize: 12 }}>{l.bairro || '—'}</td>
+                    <td style={{ color: '#aaa', fontSize: 12 }}>{l.cidade || '—'}</td>
                     <td style={{ fontSize: 12 }}>
                       {l.website
                         ? <a href={l.website} target="_blank" rel="noreferrer" style={{ color: '#3b82f6' }}>↗ Ver</a>
                         : <span style={{ color: '#555' }}>—</span>}
                     </td>
-                    <td style={{ color: '#aaa', fontSize: 12 }}>{l.cnpj || '—'}</td>
+                    <td style={{ color: '#f59e0b', textAlign: 'center' }}>{l.rating || '—'}</td>
                     <td>
-                      {l.linkedin_url
-                        ? <a href={l.linkedin_url} target="_blank" rel="noreferrer" style={{ color: '#3b82f6' }}>↗ Ver</a>
+                      {l.maps_url
+                        ? <a href={l.maps_url} target="_blank" rel="noreferrer" style={{ color: '#3b82f6', fontSize: 12 }}>↗ Maps</a>
                         : <span style={{ color: '#555' }}>—</span>}
                     </td>
                     <td><ScoreBadge score={l.score_ia} /></td>
