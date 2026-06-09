@@ -289,6 +289,16 @@ io.on('connection', (socket) => {
     })
 })
 
+app.get('/qrcode-json', async (req, res) => {
+    if (!lastQR) return res.json({ qr: null })
+    try {
+        const qrImageUrl = await QRCode.toDataURL(lastQR)
+        res.json({ qr: qrImageUrl })
+    } catch(e) {
+        res.json({ qr: null })
+    }
+})
+
 app.get('/status', (req, res) => {
     if (sockGlobal && sockGlobal.user) {
         res.json({ connected: true, number: sockGlobal.user.id.split(':')[0] })
@@ -340,8 +350,9 @@ app.post('/ia-responder', async (req, res) => {
     }
 })
 
-httpServer.listen(3000, () => {
-    console.log('🚀 SERVIDOR RODANDO NA PORTA 3000')
+const PORT = process.env.PORT || 3000
+httpServer.listen(PORT, () => {
+    console.log(`🚀 SERVIDOR RODANDO NA PORTA ${PORT}`)
     console.log('📱 QR Code disponível em: /qrcode')
     connectToWhatsApp()
 })
