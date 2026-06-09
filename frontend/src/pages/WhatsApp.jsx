@@ -1,16 +1,12 @@
-import { useState, useEffect, useRef } from 'react';
-import { io } from 'socket.io-client';
+import { useState, useEffect } from 'react';
 import { apiFetch } from '../lib/api';
 import { useToast } from '../hooks/useToast';
-
-const BAILEYS_URL = 'http://localhost:3001';
 
 export default function WhatsApp() {
   const toast = useToast();
   const [status, setStatus] = useState({ connected: false, number: '' });
   const [qr, setQr] = useState('');
   const [loading, setLoading] = useState(false);
-  const socketRef = useRef(null);
 
   async function carregarWpp() {
     setLoading(true);
@@ -34,25 +30,9 @@ export default function WhatsApp() {
 
   useEffect(() => {
     carregarWpp();
-
-    const socket = io(BAILEYS_URL, { transports: ['websocket'] });
-    socketRef.current = socket;
-
-    socket.on('qr_code', (data) => {
-      setQr(data.qr || data);
-      setStatus(s => ({ ...s, connected: false }));
-    });
-
-    socket.on('connected', (data) => {
-      setStatus({ connected: true, number: data?.number || '' });
-      setQr('');
-    });
-
-    socket.on('disconnected', () => {
-      setStatus({ connected: false, number: '' });
-    });
-
-    return () => socket.disconnect();
+    // Polling a cada 15s para atualizar QR automaticamente
+    const interval = setInterval(carregarWpp, 15000);
+    return () => clearInterval(interval);
   }, []);
 
   const badgeClass = `badge badge-${status.connected ? 'conectado' : 'desconectado'}`;
@@ -84,7 +64,7 @@ export default function WhatsApp() {
               )}
             </div>
             <span className={badgeClass} style={{ marginLeft: 'auto' }}>
-              {status.connected ? 'Conectado' : 'Desconectado'}
+              {status.connected ? 'CONECTADO' : 'DESCONECTADO'}
             </span>
           </div>
 
@@ -99,7 +79,7 @@ export default function WhatsApp() {
                 <div style={{ color: '#555', fontSize: 13 }}>Aguardando QR Code...</div>
               )}
               <p style={{ fontSize: 11, color: '#555', marginTop: 10 }}>
-                Atualize a cada 30s se expirar
+                Atualiza automaticamente a cada 15s
               </p>
             </div>
           )}
