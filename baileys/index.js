@@ -52,6 +52,16 @@ app.get('/qrcode', async (req, res) => {
     }
 })
 
+app.get('/qrcode-json', async (req, res) => {
+    if (!lastQR) return res.json({ qr: null })
+    try {
+        const qrImageUrl = await QRCode.toDataURL(lastQR)
+        res.json({ qr: qrImageUrl })
+    } catch (e) {
+        res.json({ qr: null })
+    }
+})
+
 async function connectToWhatsApp() {
     const { version, isLatest } = await fetchLatestBaileysVersion()
     console.log(`Versão do WhatsApp Web: v${version.join('.')}`)
