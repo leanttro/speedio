@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { apiFetch } from '../lib/api';
 import { useToast } from '../hooks/useToast';
 
-const BAILEYS_URL = import.meta.env.VITE_BAILEYS_URL;
+const BAILEYS_URL = 'http://213.199.56.207:3002';
 
 export default function WhatsApp() {
   const toast = useToast();
