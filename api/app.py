@@ -1774,24 +1774,149 @@ def status_enrichment(lead_id: int, user=Depends(get_current_user), conn=Depends
 #  ROUTES — CHATBOT IA (NL → SQL)
 # ─────────────────────────────────────────
 
+SISTEMA_CONHECIMENTO = """
+Você é o assistente do Prospector IA, um sistema de prospecção e vendas via WhatsApp com inteligência artificial.
+Responda dúvidas sobre o sistema de forma clara, direta e em português.
+
+═══════════════════════════════════════
+ VISÃO GERAL DO SISTEMA
+═══════════════════════════════════════
+O Prospector IA automatiza a prospecção de clientes pelo WhatsApp. A IA entra em contato com leads, mantém conversas de vendas, faz follow-ups automáticos e você acompanha tudo em tempo real.
+
+═══════════════════════════════════════
+ MÓDULOS DO SISTEMA
+═══════════════════════════════════════
+
+1. CONTATOS
+   - Cadastre manualmente ou importe via CSV
+   - Campos: nome, telefone, empresa, cargo, notas
+   - Status possíveis: pendente, em_contato, convertido, perdido
+   - O sistema só responde contatos cadastrados — desconhecidos são ignorados automaticamente
+
+2. CAMPANHAS
+   - Crie uma campanha, adicione contatos e dispare
+   - A IA envia a mensagem de abertura automaticamente para cada contato
+   - Velocidade configurável (intervalo entre envios em segundos)
+   - Status da campanha: rascunho, ativa, pausada, concluída
+   - Após o disparo, follow-ups automáticos são agendados
+
+3. CONVERSAS
+   - Cada contato que responde gera uma conversa
+   - Modo IA: a IA responde automaticamente
+   - Modo Manual: você assume o controle e a IA para de responder
+   - Para alternar entre modos, clique no botão de modo na conversa
+   - O histórico completo fica salvo
+
+4. CONFIGURAÇÃO DA IA (AI Config)
+   - Persona: nome e personalidade da IA (ex: "Spencer")
+   - Prompt do sistema: instruções personalizadas de comportamento
+   - Produto: nome, descrição e preço do que você vende
+   - Horário de funcionamento: a IA só responde dentro do horário definido
+   - Delay entre mensagens: tempo de espera antes de responder (simula humano)
+   - Gatilhos de parada: palavras que encerram a conversa (ex: "não quero", "para")
+   - Mídia de abertura: imagem/vídeo enviado junto com a primeira mensagem
+   - Mídia de fechamento: enviada quando o lead demonstra interesse
+   - Follow-ups: quantidade e intervalo (em horas) entre tentativas automáticas
+   - Modelo de IA: llama-3.1-8b-instant (rápido) ou llama-3.3-70b-versatile (mais capaz)
+   - Temperatura: controla criatividade da IA (0 = conservador, 1 = criativo)
+
+5. LEADS (Prospecção Automática)
+   - Busca empresas no Google Maps por nicho e cidade
+   - Enriquece com dados da ReceitaWS (CNPJ, porte, sócios)
+   - Gera score de 0-100 com justificativa via IA
+   - Gera mensagem personalizada de WhatsApp para cada lead
+   - Status: pendente → enriquecendo → enriquecido → contato_enviado → convertido/perdido
+
+6. ANALYTICS
+   - Painel com métricas diárias: mensagens enviadas, recebidas, leads abordados
+   - Acompanhe o desempenho das campanhas em tempo real
+
+7. CHATBOT IA (este assistente)
+   - Faça perguntas em linguagem natural sobre seus dados
+   - Exemplos: "quantos leads tenho?", "quais contatos estão em contato?", "leads de São Paulo com score acima de 70"
+   - Também responde dúvidas sobre como usar o sistema
+
+═══════════════════════════════════════
+ PERGUNTAS FREQUENTES
+═══════════════════════════════════════
+
+P: Como a IA sabe com quem falar?
+R: Ela só responde contatos cadastrados no sistema. Se um número desconhecido mandar mensagem, é ignorado.
+
+P: O que acontece quando alguém responde "não quero"?
+R: A conversa é encerrada automaticamente e o contato marcado como "perdido".
+
+P: Posso pausar a IA em uma conversa específica?
+R: Sim. Entre na conversa e mude para Modo Manual. A IA para de responder e você assume.
+
+P: Como funciona o follow-up?
+R: Após o disparo inicial, o sistema agenda automaticamente mensagens de retorno para quem não respondeu, no intervalo configurado (padrão: 24h).
+
+P: A IA responde fora do horário configurado?
+R: Não. Fora do horário definido em AI Config, as mensagens chegam mas a IA não responde.
+
+P: Como importar contatos?
+R: Na tela de Contatos, use o botão de importar CSV. O arquivo deve ter colunas: nome, telefone (obrigatórios), empresa, cargo, notas (opcionais).
+
+P: O que é o score de leads?
+R: Uma pontuação de 0-100 gerada pela IA com base nos dados do CNPJ, porte da empresa, situação cadastral e nicho. Quanto maior, mais qualificado o lead.
+
+P: Posso usar minha própria chave Groq?
+R: Sim. Em Configurações, ative "Usar IA própria" e insira sua chave da Groq.
+
+Se a pergunta for sobre dados do banco (quantos leads, listar contatos, etc.), responda que vai consultar os dados.
+Se não souber responder, diga que não tem essa informação disponível.
+"""
+
 @app.post("/chatbot/query")
 async def chatbot_query(body: ChatbotQueryBody, user=Depends(get_current_user), conn=Depends(get_db)):
-    """
-    Recebe pergunta em linguagem natural, converte em SQL via Groq,
-    executa no banco e retorna a resposta formatada.
-    Exemplos:
-      - "quantos leads do setor alimentício?"
-      - "leads com score acima de 70"
-      - "marca o lead 5 como convertido"
-    """
-    system = """Você é um assistente de banco de dados. Converta perguntas em linguagem natural para SQL PostgreSQL.
+    pergunta = body.pergunta.strip()
 
-Tabela disponível: leads
-Colunas: id, nome, telefone, endereco, bairro, cidade, nicho, place_id, maps_url, website, rating,
-         lat, lng, cnpj, porte, socios, situacao_cadastral, linkedin_url,
-         score_ia, score_justificativa, mensagem_wpp, status, enriched_at, created_at, updated_at
+    # ── Passo 1: detecta se é dúvida sobre o sistema ou consulta de dados ──
+    classificador = """Classifique a pergunta abaixo em uma das duas categorias e responda APENAS com uma palavra:
+- SISTEMA: dúvida sobre como funciona, configurar ou usar o sistema
+- DADOS: consulta sobre dados reais (leads, contatos, campanhas, números, listas)
 
-Status possíveis: pendente, enriquecendo, enriquecido, score_gerado, contato_enviado, convertido, perdido, erro_enrichment
+Exemplos SISTEMA: "como criar uma campanha", "o que é follow-up", "como funciona a IA", "o que é score"
+Exemplos DADOS: "quantos leads tenho", "listar contatos", "leads de SP", "qual campanha tem mais enviados"
+
+Responda APENAS: SISTEMA ou DADOS"""
+
+    try:
+        categoria = await chamar_groq(classificador, [{"role": "user", "content": pergunta}], GROQ_API_KEY, 0.0, "llama-3.1-8b-instant")
+        categoria = categoria.strip().upper()
+    except Exception:
+        categoria = "DADOS"
+
+    # ── Passo 2a: pergunta sobre o sistema → responde com conhecimento ──
+    if "SISTEMA" in categoria:
+        try:
+            resposta = await chamar_groq(SISTEMA_CONHECIMENTO, [{"role": "user", "content": pergunta}], GROQ_API_KEY, 0.4, "llama-3.1-8b-instant")
+            return {"resposta": resposta, "sql": None, "total": None}
+        except Exception as e:
+            raise HTTPException(500, f"Erro ao responder: {str(e)}")
+
+    # ── Passo 2b: consulta de dados → gera SQL e executa ──
+    system_sql = """Você é um assistente de banco de dados. Converta perguntas em linguagem natural para SQL PostgreSQL.
+
+Tabelas disponíveis:
+
+leads: id, nome, telefone, endereco, bairro, cidade, nicho, place_id, maps_url, website, rating,
+       lat, lng, cnpj, porte, socios, situacao_cadastral, linkedin_url,
+       score_ia, score_justificativa, mensagem_wpp, status, enriched_at, created_at, updated_at
+  Status possíveis: pendente, enriquecendo, enriquecido, score_gerado, contato_enviado, convertido, perdido, erro_enrichment
+
+contacts: id, usuario_id, nome, telefone, empresa, cargo, notas, status, criado_em, atualizado_em
+  Status possíveis: pendente, em_contato, convertido, perdido
+
+conversations: id, usuario_id, contact_id, campaign_id, jid, status, modo, criado_em, atualizado_em
+  Status possíveis: ativa, encerrada
+
+campaigns: id, usuario_id, nome, status, velocidade, enviados, criado_em, atualizado_em
+  Status possíveis: rascunho, ativa, pausada, concluída
+
+messages: id, conversation_id, role, content, timestamp
+  role: user, assistant
 
 Regras OBRIGATÓRIAS:
 - Retorne APENAS o SQL, sem markdown, sem explicação, sem ponto-e-vírgula no final
@@ -1801,29 +1926,26 @@ Regras OBRIGATÓRIAS:
 - Se não entender a pergunta, retorne: SELECT 'Não entendi a pergunta' as resposta"""
 
     try:
-        sql = await chamar_groq(system, [{"role": "user", "content": body.pergunta}], GROQ_API_KEY, 0.1, "llama-3.3-70b-versatile")
+        sql = await chamar_groq(system_sql, [{"role": "user", "content": pergunta}], GROQ_API_KEY, 0.1, "llama-3.3-70b-versatile")
         sql = sql.strip().rstrip(";")
 
-        # Segurança: bloqueia comandos destrutivos
         sql_upper = sql.upper()
         for cmd in ["DROP", "DELETE", "TRUNCATE", "ALTER", "CREATE", "INSERT"]:
             if cmd in sql_upper and "UPDATE" not in sql_upper:
                 raise HTTPException(400, "Comando não permitido")
 
-        # Executa o SQL
         cur = conn.cursor()
         cur.execute(sql)
 
         if sql_upper.strip().startswith("SELECT"):
-            rows    = cur.fetchall()
-            colunas = [desc[0] for desc in cur.description]
+            rows      = cur.fetchall()
+            colunas   = [desc[0] for desc in cur.description]
             resultado = [dict(zip(colunas, row)) for row in rows]
             conn.commit()
 
-            # Pede ao Groq para formatar a resposta em português
             resposta_sql = json.dumps(resultado[:10], ensure_ascii=False, default=str)
-            system2 = "Você é um assistente. Responda a pergunta do usuário com base nos dados fornecidos. Seja direto e claro, em português."
-            contexto = f"Pergunta: {body.pergunta}\nDados: {resposta_sql}"
+            system2  = "Você é um assistente. Responda a pergunta do usuário com base nos dados fornecidos. Seja direto e claro, em português."
+            contexto = f"Pergunta: {pergunta}\nDados: {resposta_sql}"
             resposta = await chamar_groq(system2, [{"role": "user", "content": contexto}], GROQ_API_KEY, 0.5, "llama-3.1-8b-instant")
 
             return {"sql": sql, "resultado": resultado, "resposta": resposta, "total": len(resultado)}
