@@ -653,7 +653,7 @@ async def worker_campanhas():
     print("🔄 Worker de campanhas iniciado")
     while True:
         try:
-            job = await redis.blpop("fila_campanha", timeout=5)
+            job = await redis.blpop("fila_campanha", timeout=15)
             if not job:
                 continue
             data        = json.loads(job[1])
@@ -1007,7 +1007,7 @@ async def enviar_mensagem_manual(body: SendMessageBody, user=Depends(get_current
 @app.get("/whatsapp/status")
 def wpp_status(user=Depends(get_current_user)):
     try:
-        r = httpx.get(f"{BAILEYS_URL}/status", timeout=5)
+        r = httpx.get(f"{BAILEYS_URL}/status", timeout=15)
         return r.json()
     except:
         return {"connected": False, "number": ""}
@@ -1376,7 +1376,7 @@ async def worker_enricher():
     print("🔄 Worker enricher iniciado")
     while True:
         try:
-            job = await redis.blpop("fila_enricher", timeout=5)
+            job = await redis.blpop("fila_enricher", timeout=15)
             if not job:
                 continue
             data    = json.loads(job[1])
