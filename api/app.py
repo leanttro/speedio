@@ -1015,10 +1015,13 @@ def wpp_status(user=Depends(get_current_user)):
 @app.get("/whatsapp/qrcode")
 async def wpp_qrcode(user=Depends(get_current_user)):
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            r    = await client.get(f"{BAILEYS_URL}/qrcode-json")
-            data = r.json()
-            return {"qr": data.get("qr")}
+        async with httpx.AsyncClient(timeout=5) as client:
+            r    = await client.get(f"{BAILEYS_URL}/qrcode")
+            html = r.text
+            match = re.search(r'src="(data:image[^"]+)"', html)
+            if match:
+                return {"qr": match.group(1)}
+            return {"qr": None}
     except:
         return {"qr": None}
 
