@@ -8,6 +8,7 @@ import express from 'express'
 import cors from 'cors'
 import { createServer } from 'http'
 import { Server } from 'socket.io'
+import { createClient } from 'redis'
 
 const app = express()
 app.use(cors())
@@ -17,6 +18,17 @@ const httpServer = createServer(app)
 const io = new Server(httpServer, { 
     cors: { origin: '*', methods: ["GET", "POST"] } 
 })
+
+// ── REDIS ──────────────────────────────────────────────────────────
+const redisClient = createClient({ url: process.env.REDIS_URL || 'redis://redis:6379' })
+redisClient.connect().catch(e => console.error('Redis connect error:', e))
+
+async function salvarQRnoRedis(qrBase64) {
+    try { await redisClient.set('baileys:qr', qrBase64, { EX: 60 }) } catch(e) {}
+}
+async function limparQRnoRedis() {
+    try { await redisClient.del('baileys:qr') } catch(e) {}
+}
 
 const TYPEBOT_URL = process.env.TYPEBOT_URL
 let sockGlobal
@@ -52,16 +64,6 @@ app.get('/qrcode', async (req, res) => {
     }
 })
 
-app.get('/qrcode-json', async (req, res) => {
-    if (!lastQR) return res.json({ qr: null })
-    try {
-        const qrImageUrl = await QRCode.toDataURL(lastQR)
-        res.json({ qr: qrImageUrl })
-    } catch (e) {
-        res.json({ qr: null })
-    }
-})
-
 async function connectToWhatsApp() {
     const { version, isLatest } = await fetchLatestBaileysVersion()
     console.log(`Versão do WhatsApp Web: v${version.join('.')}`)
@@ -85,15 +87,16 @@ async function connectToWhatsApp() {
             lastQR = qr  // ← salva para a rota /qrcode
             console.log('\n👇 QR disponível em: http://localhost:3000/qrcode')
             qrcode.generate(qr, { small: true })
-            // também emite pelo WebSocket para quem estiver conectado
             try {
                 const qrImageUrl = await QRCode.toDataURL(qr)
                 io.emit('qr_code', { qr: qrImageUrl })
+                await salvarQRnoRedis(qrImageUrl)  // ← salva no Redis
             } catch(e) {}
         }
 
         if (connection === 'close') {
             lastQR = null
+            limparQRnoRedis()
             const shouldReconnect = (lastDisconnect?.error instanceof Boom)
                 ? lastDisconnect.error.output?.statusCode !== DisconnectReason.loggedOut
                 : true
@@ -101,6 +104,7 @@ async function connectToWhatsApp() {
             if (shouldReconnect) connectToWhatsApp()
         } else if (connection === 'open') {
             lastQR = null
+            limparQRnoRedis()
             console.log('✅ WHATSAPP CONECTADO - AGUARDANDO COMANDOS')
             sockGlobal = sock
             io.emit('wpp_conectado', { status: true })
