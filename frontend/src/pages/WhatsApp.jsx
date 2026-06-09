@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { apiFetch } from '../lib/api';
 import { useToast } from '../hooks/useToast';
 
+const BAILEYS_URL = import.meta.env.VITE_BAILEYS_URL;
+
 export default function WhatsApp() {
   const toast = useToast();
   const [status, setStatus] = useState({ connected: false, number: '' });
@@ -15,7 +17,7 @@ export default function WhatsApp() {
       const d = await r.json();
       setStatus({ connected: d.connected, number: d.number || '' });
       if (!d.connected) {
-        const qrR = await apiFetch('/whatsapp/qrcode');
+        const qrR = await fetch(`${BAILEYS_URL}/qrcode-json`);
         const qrD = await qrR.json();
         setQr(qrD.qr || '');
       } else {
@@ -30,7 +32,6 @@ export default function WhatsApp() {
 
   useEffect(() => {
     carregarWpp();
-    // Polling a cada 15s para atualizar QR automaticamente
     const interval = setInterval(carregarWpp, 15000);
     return () => clearInterval(interval);
   }, []);
