@@ -981,7 +981,7 @@ def listar_campaigns(user=Depends(get_current_user), conn=Depends(get_db)):
 @app.post("/campaigns")
 def criar_campaign(body: CampaignBody, user=Depends(get_current_user), conn=Depends(get_db)):
     camp = db_exec(conn,
-        "INSERT INTO campaigns (usuario_id, nome, velocidade, total_contatos) VALUES (%s,%s,%s,%s) RETURNING *",
+        "INSERT INTO campaigns (usuario_id, nome, velocidade, total_contatos, status) VALUES (%s,%s,%s,%s,'rascunho') RETURNING *",
         (user["id"], body.nome, body.velocidade, len(body.contact_ids)))
     for cid in body.contact_ids:
         try:
