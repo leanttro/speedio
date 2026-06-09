@@ -1931,7 +1931,7 @@ Regras OBRIGATÓRIAS:
 
         sql_upper = sql.upper()
         for cmd in ["DROP", "DELETE", "TRUNCATE", "ALTER", "CREATE", "INSERT"]:
-            if cmd in sql_upper and "UPDATE" not in sql_upper:
+            if cmd in sql_upper:
                 raise HTTPException(400, "Comando não permitido")
 
         cur = conn.cursor()
