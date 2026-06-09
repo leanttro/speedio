@@ -1160,6 +1160,7 @@ RECEITAWS_URL  = "https://www.receitaws.com.br/v1/cnpj"
 class LeadSearchBody(BaseModel):
     nicho:  str
     cidade: str
+    bairro: Optional[str] = None
 
 class LeadStatusBody(BaseModel):
     status: str
@@ -1418,40 +1419,109 @@ app.router.lifespan_context = lifespan_speedio
 #  ROUTES — LEADS
 # ─────────────────────────────────────────
 
+def geocodificar_coords(lat: str, lng: str) -> dict:
+    try:
+        resp = httpx.get(
+            "https://nominatim.openstreetmap.org/reverse",
+            params={"lat": lat, "lon": lng, "format": "json", "addressdetails": 1},
+            headers={"User-Agent": "speedio-app/1.0"},
+            timeout=8,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            addr = data.get("address", {})
+            rua    = addr.get("road") or addr.get("pedestrian") or addr.get("street") or ""
+            numero = addr.get("house_number", "")
+            end_fmt = f"{rua}, {numero}".strip(", ") if rua else ""
+            bairro  = (addr.get("suburb") or addr.get("neighbourhood") or
+                       addr.get("quarter") or addr.get("district") or
+                       addr.get("city_district") or "")
+            cidade  = addr.get("city") or addr.get("town") or addr.get("municipality") or ""
+            return {"endereco": end_fmt, "bairro": bairro, "cidade": cidade}
+    except:
+        pass
+    return {}
+
+def extrair_bairro_e_cidade(endereco: str) -> tuple:
+    if not endereco: return "", ""
+    limpo = re.sub(r",?\s*\d{5}-\d{3}", "", endereco)
+    limpo = re.sub(r",?\s*Brasil\s*$", "", limpo, flags=re.IGNORECASE).strip()
+    partes = [p.strip() for p in limpo.split(",")]
+    bairro, cidade = "", ""
+    if len(partes) >= 2:
+        ultima = partes[-1]
+        cidade = re.split(r"\s*-\s*[A-Z]{2}$", ultima)[0].strip()
+        primeira = partes[0]
+        if " - " in primeira:
+            bairro = primeira.split(" - ", 1)[-1].strip()
+        elif len(partes) >= 3:
+            bairro = partes[-2].strip()
+    return bairro, cidade
+
 @app.post("/leads/search")
 async def buscar_leads(body: LeadSearchBody, user=Depends(get_current_user), conn=Depends(get_db)):
-    """
-    Busca leads no Google Maps via Serper e salva na tabela leads.
-    Ignora duplicatas pelo place_id.
-    """
-    query    = f"{body.nicho} em {body.cidade}"
-    lugares  = buscar_maps(query)
-    inseridos = 0
-    duplicatas = 0
+    bairros = [b.strip() for b in (body.bairro or "").split(",") if b.strip()]
+    queries = []
+    if bairros:
+        for b in bairros:
+            queries.append(f"{body.nicho} em {b} {body.cidade}")
+    else:
+        queries.append(f"{body.nicho} em {body.cidade}")
+        queries.append(f"{body.nicho} {body.cidade} centro")
 
-    for lugar in lugares:
-        nome     = lugar.get("title", "").strip()
-        if not nome: continue
+    vistos, inseridos, duplicatas = set(), 0, 0
 
-        place_id = lugar.get("placeId") or lugar.get("place_id") or ""
-        telefone = limpar_telefone(lugar.get("phoneNumber") or lugar.get("phone") or "")
-        endereco = lugar.get("address", "")
-        website  = lugar.get("website", "") or lugar.get("siteUrl", "")
-        maps_url = f"https://www.google.com/maps/place/?q=place_id:{place_id}" if place_id else lugar.get("link", "")
-        rating   = str(lugar.get("rating", ""))
-        lat, lng = extrair_coordenadas(lugar)
+    for query in queries:
+        lugares = buscar_maps(query)
+        for lugar in lugares:
+            nome = lugar.get("title", "").strip()
+            if not nome: continue
 
-        try:
-            db_exec(conn, """
-                INSERT INTO leads (nome, telefone, endereco, cidade, nicho, place_id, maps_url, website, rating, lat, lng)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                ON CONFLICT (place_id) DO NOTHING
-            """, (nome, telefone, endereco, body.cidade, body.nicho, place_id, maps_url, website, rating, str(lat), str(lng)))
-            inseridos += 1
-        except Exception:
-            duplicatas += 1
+            place_id = lugar.get("placeId") or lugar.get("place_id") or ""
+            chave = place_id or nome
+            if chave in vistos: continue
+            vistos.add(chave)
 
-    return {"inseridos": inseridos, "duplicatas": duplicatas, "total_encontrados": len(lugares)}
+            telefone = limpar_telefone(lugar.get("phoneNumber") or lugar.get("phone") or "")
+            website  = lugar.get("website", "") or lugar.get("siteUrl", "")
+            maps_url = f"https://www.google.com/maps/place/?q=place_id:{place_id}" if place_id else lugar.get("link", "")
+            rating   = str(lugar.get("rating", ""))
+            lat, lng = extrair_coordenadas(lugar)
+
+            endereco     = lugar.get("address", "")
+            bairro_final = ""
+            cidade_final = body.cidade
+
+            if lat and lng:
+                geo = geocodificar_coords(str(lat), str(lng))
+                if geo.get("endereco"): endereco     = geo["endereco"]
+                if geo.get("bairro"):   bairro_final = geo["bairro"]
+                if geo.get("cidade"):   cidade_final = geo["cidade"]
+            else:
+                bairro_final, cidade_ext = extrair_bairro_e_cidade(endereco)
+                if cidade_ext: cidade_final = cidade_ext
+
+            try:
+                cur = conn.cursor()
+                cur.execute("""
+                    INSERT INTO leads (nome, telefone, endereco, bairro, cidade, nicho, place_id, maps_url, website, rating, lat, lng)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    ON CONFLICT (place_id) DO NOTHING
+                    RETURNING id
+                """, (nome, telefone, endereco, bairro_final, cidade_final, body.nicho,
+                      place_id or nome, maps_url, website, rating, str(lat), str(lng)))
+                row = cur.fetchone()
+                conn.commit()
+                if row:
+                    inseridos += 1
+                else:
+                    duplicatas += 1
+            except Exception:
+                duplicatas += 1
+
+            import time as _t; _t.sleep(0.4)
+
+    return {"encontrados": inseridos, "duplicatas": duplicatas, "total_queries": len(queries)}
 
 
 @app.get("/leads")
