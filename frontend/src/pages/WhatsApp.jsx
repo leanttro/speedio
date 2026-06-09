@@ -15,7 +15,7 @@ export default function WhatsApp() {
       const d = await r.json();
       setStatus({ connected: d.connected, number: d.number || '' });
       if (!d.connected) {
-        const qrR = await apiFetch('/whatsapp/qrcode-json');
+        const qrR = await apiFetch('/whatsapp/qrcode');
         const qrD = await qrR.json();
         setQr(qrD.qr || '');
       } else {
