@@ -6,6 +6,7 @@ export default function BuscaLeads() {
   const toast = useToast();
   const [nicho, setNicho] = useState('');
   const [cidade, setCidade] = useState('');
+  const [bairro, setBairro] = useState('');
   const [loading, setLoading] = useState(false);
   const [resultado, setResultado] = useState(null);
 
@@ -19,11 +20,11 @@ export default function BuscaLeads() {
     try {
       const r = await apiFetch('/leads/search', {
         method: 'POST',
-        body: JSON.stringify({ nicho: nicho.trim(), cidade: cidade.trim() }),
+        body: JSON.stringify({ nicho: nicho.trim(), cidade: cidade.trim(), bairro: bairro.trim() }),
       });
       const d = await r.json();
       if (r.ok) {
-        const msg = `${d.encontrados ?? d.inseridos ?? 0} leads encontrados, ${d.duplicatas ?? 0} duplicatas ignoradas`;
+        const msg = `✓ ${d.encontrados ?? 0} leads salvos, ${d.duplicatas ?? 0} duplicatas ignoradas`;
         setResultado({ ok: true, msg });
         toast(msg);
       } else {
@@ -49,15 +50,13 @@ export default function BuscaLeads() {
       <div className="page-header">
         <div>
           <h2>Busca de Leads</h2>
-          <p>Encontre empresas por nicho e cidade</p>
+          <p>Encontre empresas por nicho, cidade e bairro</p>
         </div>
       </div>
 
       <div className="page-body">
-        <div
-          className="card"
-          style={{ maxWidth: 480, display: 'flex', flexDirection: 'column', gap: 0 }}
-        >
+        <div className="card" style={{ maxWidth: 520, display: 'flex', flexDirection: 'column', gap: 0 }}>
+
           <div className="form-group">
             <label>Nicho</label>
             <input
@@ -65,7 +64,7 @@ export default function BuscaLeads() {
               value={nicho}
               onChange={e => setNicho(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder='Ex: restaurantes'
+              placeholder="Ex: restaurantes, clínicas, academias"
               disabled={loading}
             />
           </div>
@@ -77,7 +76,19 @@ export default function BuscaLeads() {
               value={cidade}
               onChange={e => setCidade(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder='Ex: São Paulo'
+              placeholder="Ex: São Paulo"
+              disabled={loading}
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Bairro(s) <span style={{ color: '#888', fontWeight: 400 }}>(opcional — separe por vírgula)</span></label>
+            <input
+              type="text"
+              value={bairro}
+              onChange={e => setBairro(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Ex: Moema, Vila Olímpia, Itaim Bibi"
               disabled={loading}
             />
           </div>
@@ -88,23 +99,41 @@ export default function BuscaLeads() {
             disabled={loading}
             style={{ marginTop: 4 }}
           >
-            {loading ? 'Buscando...' : '🔍 Buscar'}
+            {loading ? (
+              <span>🔄 Buscando e geocodificando... aguarde</span>
+            ) : (
+              <span>🔍 Buscar</span>
+            )}
           </button>
 
-          {resultado && (
-            <div
-              style={{
-                marginTop: 16,
-                padding: '10px 14px',
-                borderRadius: 6,
-                fontSize: 13,
-                background: resultado.ok ? '#14532d' : '#450a0a',
-                border: `1px solid ${resultado.ok ? '#166534' : '#7f1d1d'}`,
-                color: resultado.ok ? '#86efac' : '#fca5a5',
-              }}
-            >
-              {resultado.ok ? '✓ ' : '✕ '}{resultado.msg}
+          {loading && (
+            <div style={{ marginTop: 12, fontSize: 12, color: '#888', textAlign: 'center' }}>
+              Buscando no Google Maps e geocodificando endereços via Nominatim...
             </div>
+          )}
+
+          {resultado && (
+            <div style={{
+              marginTop: 16,
+              padding: '10px 14px',
+              borderRadius: 6,
+              fontSize: 13,
+              background: resultado.ok ? '#14532d' : '#450a0a',
+              border: `1px solid ${resultado.ok ? '#166534' : '#7f1d1d'}`,
+              color: resultado.ok ? '#86efac' : '#fca5a5',
+            }}>
+              {resultado.msg}
+            </div>
+          )}
+
+          {resultado?.ok && (
+            <button
+              className="btn btn-secondary btn-sm"
+              style={{ marginTop: 10 }}
+              onClick={() => window.location.href = '/dashboard/leads'}
+            >
+              Ver leads salvos →
+            </button>
           )}
         </div>
       </div>
