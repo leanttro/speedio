@@ -281,7 +281,7 @@ export default function Campanhas() {
                       </td>
                       <td style={{ color: '#888' }}>{c.velocidade}s</td>
                       <td style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                        {['rascunho', 'pausada'].includes(c.status) && (
+                        {['rascunho', 'pausada', 'pendente'].includes(c.status) && (
                           <button className="btn btn-success btn-sm" onClick={() => statusCampanha(c.id, 'ativa')}>▶ Ativar</button>
                         )}
                         {c.status === 'ativa' && (
