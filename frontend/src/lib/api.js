@@ -1,4 +1,4 @@
-export const API_URL = 'https://wpp.leanttro.com';
+export const API_URL = 'https://api.leanttro.com';
 
 export async function apiFetch(path, options = {}) {
   const token = localStorage.getItem('token');
