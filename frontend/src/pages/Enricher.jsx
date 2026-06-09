@@ -20,12 +20,12 @@ function Truncated({ text, maxLen = 80 }) {
 
 export default function Enricher() {
   const toast = useToast();
-  const [leads, setLeads]           = useState([]);
-  const [loading, setLoading]       = useState(false);
-  const [enriching, setEnriching]   = useState({}); // { [id]: true }
-  const [batchLoading, setBatch]    = useState(false);
-  const [modal, setModal]           = useState(null);
-  const [aba, setAba]               = useState('pendentes'); // pendentes | enriquecidos
+  const [leads, setLeads]         = useState([]);
+  const [loading, setLoading]     = useState(false);
+  const [enriching, setEnriching] = useState({});
+  const [batchLoading, setBatch]  = useState(false);
+  const [modal, setModal]         = useState(null);
+  const [aba, setAba]             = useState('pendentes');
 
   async function carregar() {
     setLoading(true);
@@ -44,12 +44,8 @@ export default function Enricher() {
     setEnriching(e => ({ ...e, [id]: true }));
     try {
       const r = await apiFetch(`/enricher/enrich/${id}`, { method: 'POST' });
-      if (r.ok) {
-        toast('Lead enriquecido!');
-        carregar();
-      } else {
-        toast('Erro ao enriquecer', 'err');
-      }
+      if (r.ok) { toast('Lead enriquecido!'); carregar(); }
+      else toast('Erro ao enriquecer', 'err');
     } catch { toast('Erro de conexão', 'err'); }
     finally { setEnriching(e => ({ ...e, [id]: false })); }
   }
@@ -59,12 +55,8 @@ export default function Enricher() {
     try {
       const r = await apiFetch('/enricher/enrich-batch', { method: 'POST' });
       const d = await r.json();
-      if (r.ok) {
-        toast(`${d.processados} leads enriquecidos!`);
-        carregar();
-      } else {
-        toast('Erro ao enriquecer lote', 'err');
-      }
+      if (r.ok) { toast(`${d.processados} leads enriquecidos!`); carregar(); }
+      else toast('Erro ao enriquecer lote', 'err');
     } catch { toast('Erro de conexão', 'err'); }
     finally { setBatch(false); }
   }
@@ -93,24 +85,14 @@ export default function Enricher() {
         </div>
       </div>
 
-      {/* Abas */}
       <div style={{ display: 'flex', gap: 4, padding: '0 24px', borderBottom: '1px solid #1e1e1e' }}>
         {['pendentes', 'enriquecidos'].map(a => (
-          <button
-            key={a}
-            onClick={() => setAba(a)}
-            style={{
-              padding: '8px 16px',
-              border: 'none',
-              borderBottom: aba === a ? '2px solid #7c3aed' : '2px solid transparent',
-              background: 'transparent',
-              color: aba === a ? '#a78bfa' : '#666',
-              cursor: 'pointer',
-              fontWeight: aba === a ? 600 : 400,
-              fontSize: 13,
-              textTransform: 'capitalize',
-            }}
-          >
+          <button key={a} onClick={() => setAba(a)} style={{
+            padding: '8px 16px', border: 'none',
+            borderBottom: aba === a ? '2px solid #7c3aed' : '2px solid transparent',
+            background: 'transparent', color: aba === a ? '#a78bfa' : '#666',
+            cursor: 'pointer', fontWeight: aba === a ? 600 : 400, fontSize: 13, textTransform: 'capitalize',
+          }}>
             {a}
           </button>
         ))}
@@ -123,33 +105,43 @@ export default function Enricher() {
               <thead>
                 <tr>
                   <th>Nome</th>
-                  <th>Cidade</th>
+                  <th>Telefone / WPP</th>
+                  <th>Endereço</th>
                   <th>Bairro</th>
-                  <th>Nicho</th>
-                  <th>Telefone</th>
+                  <th>Cidade</th>
+                  <th>Site</th>
                   <th>Rating</th>
+                  <th>Maps</th>
                   <th>Ação</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={7} className="empty-state">Carregando...</td></tr>
+                  <tr><td colSpan={9} className="empty-state">Carregando...</td></tr>
                 ) : leads.length === 0 ? (
-                  <tr><td colSpan={7} className="empty-state">Nenhum lead pendente</td></tr>
+                  <tr><td colSpan={9} className="empty-state">Nenhum lead pendente</td></tr>
                 ) : leads.map(l => (
                   <tr key={l.id}>
-                    <td style={{ fontWeight: 500 }}>{l.nome || '—'}</td>
-                    <td style={{ color: '#aaa' }}>{l.cidade || '—'}</td>
-                    <td style={{ color: '#aaa' }}>{l.bairro || '—'}</td>
-                    <td style={{ color: '#aaa' }}>{l.nicho || '—'}</td>
-                    <td style={{ color: '#aaa', fontSize: 12 }}>{l.telefone || '—'}</td>
-                    <td style={{ color: '#aaa' }}>{l.rating || '—'}</td>
+                    <td style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>{l.nome || '—'}</td>
+                    <td style={{ fontSize: 12, whiteSpace: 'nowrap', color: l.telefone ? '#22c55e' : '#555' }}>
+                      {l.telefone || '—'}
+                    </td>
+                    <td style={{ color: '#aaa', fontSize: 12 }}><Truncated text={l.endereco} maxLen={40} /></td>
+                    <td style={{ color: '#aaa', fontSize: 12 }}>{l.bairro || '—'}</td>
+                    <td style={{ color: '#aaa', fontSize: 12 }}>{l.cidade || '—'}</td>
+                    <td style={{ fontSize: 12 }}>
+                      {l.website
+                        ? <a href={l.website} target="_blank" rel="noreferrer" style={{ color: '#3b82f6' }}>↗ Ver</a>
+                        : <span style={{ color: '#555' }}>—</span>}
+                    </td>
+                    <td style={{ color: '#f59e0b', textAlign: 'center' }}>{l.rating || '—'}</td>
                     <td>
-                      <button
-                        className="btn btn-primary btn-sm"
-                        onClick={() => enriquecer(l.id)}
-                        disabled={enriching[l.id] || batchLoading}
-                      >
+                      {l.maps_url
+                        ? <a href={l.maps_url} target="_blank" rel="noreferrer" style={{ color: '#3b82f6', fontSize: 12 }}>↗ Maps</a>
+                        : <span style={{ color: '#555' }}>—</span>}
+                    </td>
+                    <td>
+                      <button className="btn btn-primary btn-sm" onClick={() => enriquecer(l.id)} disabled={enriching[l.id] || batchLoading}>
                         {enriching[l.id] ? '⏳' : '⚡ Enriquecer'}
                       </button>
                     </td>
@@ -162,10 +154,12 @@ export default function Enricher() {
               <thead>
                 <tr>
                   <th>Nome</th>
+                  <th>Telefone / WPP</th>
+                  <th>Endereço</th>
+                  <th>Bairro</th>
+                  <th>Site</th>
                   <th>CNPJ</th>
-                  <th>Porte</th>
                   <th>LinkedIn</th>
-                  <th>Sócios</th>
                   <th>Score IA</th>
                   <th>Justificativa</th>
                   <th>Mensagem WPP</th>
@@ -173,36 +167,34 @@ export default function Enricher() {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={8} className="empty-state">Carregando...</td></tr>
+                  <tr><td colSpan={10} className="empty-state">Carregando...</td></tr>
                 ) : leads.length === 0 ? (
-                  <tr><td colSpan={8} className="empty-state">Nenhum lead enriquecido ainda</td></tr>
+                  <tr><td colSpan={10} className="empty-state">Nenhum lead enriquecido ainda</td></tr>
                 ) : leads.map(l => (
                   <tr key={l.id}>
                     <td style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>{l.nome || '—'}</td>
+                    <td style={{ fontSize: 12, whiteSpace: 'nowrap', color: l.telefone ? '#22c55e' : '#555' }}>
+                      {l.telefone || '—'}
+                    </td>
+                    <td style={{ color: '#aaa', fontSize: 12 }}><Truncated text={l.endereco} maxLen={40} /></td>
+                    <td style={{ color: '#aaa', fontSize: 12 }}>{l.bairro || '—'}</td>
+                    <td style={{ fontSize: 12 }}>
+                      {l.website
+                        ? <a href={l.website} target="_blank" rel="noreferrer" style={{ color: '#3b82f6' }}>↗ Ver</a>
+                        : <span style={{ color: '#555' }}>—</span>}
+                    </td>
                     <td style={{ color: '#aaa', fontSize: 12 }}>{l.cnpj || '—'}</td>
-                    <td style={{ color: '#aaa' }}>{l.porte || '—'}</td>
                     <td>
                       {l.linkedin_url
                         ? <a href={l.linkedin_url} target="_blank" rel="noreferrer" style={{ color: '#3b82f6' }}>↗ Ver</a>
                         : <span style={{ color: '#555' }}>—</span>}
                     </td>
-                    <td style={{ textAlign: 'center' }}>
-                      {l.socios
-                        ? <span className="badge" style={{ background: '#1e3a5f', color: '#3b82f6' }}>
-                            {(() => { try { return JSON.parse(l.socios).length; } catch { return '?'; } })()}
-                          </span>
-                        : <span style={{ color: '#555' }}>—</span>}
-                    </td>
                     <td><ScoreBadge score={l.score_ia} /></td>
-                    <td style={{ maxWidth: 200 }}>
-                      <Truncated text={l.score_justificativa} maxLen={80} />
-                    </td>
+                    <td style={{ maxWidth: 200 }}><Truncated text={l.score_justificativa} maxLen={80} /></td>
                     <td>
-                      {l.mensagem_wpp ? (
-                        <button className="btn btn-secondary btn-sm" onClick={() => setModal({ nome: l.nome, mensagem: l.mensagem_wpp })}>
-                          Ver
-                        </button>
-                      ) : <span style={{ color: '#555', fontSize: 12 }}>—</span>}
+                      {l.mensagem_wpp
+                        ? <button className="btn btn-secondary btn-sm" onClick={() => setModal({ nome: l.nome, mensagem: l.mensagem_wpp })}>Ver</button>
+                        : <span style={{ color: '#555', fontSize: 12 }}>—</span>}
                     </td>
                   </tr>
                 ))}
@@ -212,7 +204,6 @@ export default function Enricher() {
         </div>
       </div>
 
-      {/* Modal mensagem WPP */}
       <div className={`modal-overlay${modal ? ' open' : ''}`} onClick={e => { if (e.target === e.currentTarget) setModal(null); }}>
         <div className="modal">
           <h3>Mensagem WPP — {modal?.nome}</h3>
