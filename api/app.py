@@ -843,17 +843,53 @@ def get_ai_config(user=Depends(get_current_user), conn=Depends(get_db)):
 
 @app.post("/ai-config")
 def salvar_ai_config(body: AIConfigBody, user=Depends(get_current_user), conn=Depends(get_db)):
-    existe = db_one(conn, "SELECT id FROM ai_config WHERE usuario_id = %s", (user["id"],))
-    fields = body.dict()
-    if existe:
-        sets = ", ".join(f"{k} = %s" for k in fields)
-        vals = list(fields.values()) + [user["id"]]
-        db_exec(conn, f"UPDATE ai_config SET {sets}, atualizado_em = NOW() WHERE usuario_id = %s", vals)
-    else:
-        cols = "usuario_id, " + ", ".join(fields.keys())
-        phs  = "%s, " + ", ".join(["%s"] * len(fields))
-        vals = [user["id"]] + list(fields.values())
-        db_exec(conn, f"INSERT INTO ai_config ({cols}) VALUES ({phs})", vals)
+    b = body.dict()
+    db_exec(conn, """
+        INSERT INTO ai_config (
+            usuario_id, persona_nome, prompt_sistema, temperatura, modelo,
+            produto_nome, produto_descricao, produto_preco,
+            midia_abertura_url, midia_abertura_tipo, midia_abertura_caption,
+            midia_fechamento_url, midia_fechamento_tipo, midia_fechamento_caption,
+            gatilhos_parada, horario_inicio, horario_fim,
+            delay_mensagens, max_followups, intervalo_followup
+        ) VALUES (
+            %s,%s,%s,%s,%s,
+            %s,%s,%s,
+            %s,%s,%s,
+            %s,%s,%s,
+            %s,%s,%s,
+            %s,%s,%s
+        )
+        ON CONFLICT (usuario_id) DO UPDATE SET
+            persona_nome             = EXCLUDED.persona_nome,
+            prompt_sistema           = EXCLUDED.prompt_sistema,
+            temperatura              = EXCLUDED.temperatura,
+            modelo                   = EXCLUDED.modelo,
+            produto_nome             = EXCLUDED.produto_nome,
+            produto_descricao        = EXCLUDED.produto_descricao,
+            produto_preco            = EXCLUDED.produto_preco,
+            midia_abertura_url       = EXCLUDED.midia_abertura_url,
+            midia_abertura_tipo      = EXCLUDED.midia_abertura_tipo,
+            midia_abertura_caption   = EXCLUDED.midia_abertura_caption,
+            midia_fechamento_url     = EXCLUDED.midia_fechamento_url,
+            midia_fechamento_tipo    = EXCLUDED.midia_fechamento_tipo,
+            midia_fechamento_caption = EXCLUDED.midia_fechamento_caption,
+            gatilhos_parada          = EXCLUDED.gatilhos_parada,
+            horario_inicio           = EXCLUDED.horario_inicio,
+            horario_fim              = EXCLUDED.horario_fim,
+            delay_mensagens          = EXCLUDED.delay_mensagens,
+            max_followups            = EXCLUDED.max_followups,
+            intervalo_followup       = EXCLUDED.intervalo_followup,
+            atualizado_em            = NOW()
+    """, (
+        user["id"],
+        b["persona_nome"], b["prompt_sistema"], b["temperatura"], b["modelo"],
+        b["produto_nome"], b["produto_descricao"], b["produto_preco"],
+        b["midia_abertura_url"], b["midia_abertura_tipo"], b["midia_abertura_caption"],
+        b["midia_fechamento_url"], b["midia_fechamento_tipo"], b["midia_fechamento_caption"],
+        b["gatilhos_parada"], b["horario_inicio"], b["horario_fim"],
+        b["delay_mensagens"], b["max_followups"], b["intervalo_followup"],
+    ))
     return {"ok": True}
 
 # ─────────────────────────────────────────
