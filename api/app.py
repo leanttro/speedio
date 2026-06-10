@@ -1206,14 +1206,14 @@ def admin_listar_usuarios(x_admin_token: str = "", conn=Depends(get_db)):
                    COALESCE(p.nome, 'Free') as plano_nome
             FROM usuarios u
             LEFT JOIN planos p ON p.id = u.plano_id
-            ORDER BY u.criado_em DESC
+            ORDER BY u.created_at DESC
         """)
     else:
         rows = db_all(conn, """
-            SELECT id, nome, email, ativo, criado_em,
+            SELECT id, nome, email, ativo, created_at as criado_em,
                    'Free' as plano_nome
             FROM usuarios
-            ORDER BY criado_em DESC
+            ORDER BY created_at DESC
         """)
     return [dict(r) for r in rows]
 
