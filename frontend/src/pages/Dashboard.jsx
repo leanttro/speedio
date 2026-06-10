@@ -42,12 +42,8 @@ export default function Dashboard() {
     <div className="app-layout">
       <aside className="sidebar">
         <div className="sidebar-logo">
-          <img
-            src="https://speediojobs.vagas.solides.com.br/_next/image?url=https%3A%2F%2Fc5gwmsmjx1.execute-api.us-east-1.amazonaws.com%2Fprod%2Fdados_processo_seletivo%2Flogo_empresa%2F138561%2FIO%20(the%20last%20part%20of%20the%20logo)_AZUL.png&w=828&q=100"
-            alt="Logo"
-          />
           <div className="sidebar-logo-name">
-            <span className="sidebar-logo-highlight">Leanttro Teste Speedio</span>
+            <span className="sidebar-logo-highlight">Prospector IA</span>
           </div>
         </div>
 
