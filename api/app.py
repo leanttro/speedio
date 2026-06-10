@@ -816,6 +816,7 @@ app = FastAPI(title="Prospector IA", version="1.0.0", lifespan=lifespan)
 # Adicione aqui qualquer novo domínio/subdomínio que precise acessar a API.
 _ALLOWED_ORIGINS = [
     "https://speedio.leanttro.com",
+    "https://jobi.leanttro.com",
     "https://leanttro.com",
     "https://www.leanttro.com",
     "https://admin.leanttro.com",
