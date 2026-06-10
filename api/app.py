@@ -811,11 +811,26 @@ async def lifespan(app: FastAPI):
 #  APP
 # ─────────────────────────────────────────
 app = FastAPI(title="Prospector IA", version="1.0.0", lifespan=lifespan)
-app.add_middleware(CORSMiddleware,
-    allow_origins=["https://speedio.leanttro.com", "https://leanttro.com"],
+
+# ── Origens permitidas (CORS) ──────────────────────────────────────────────
+# Adicione aqui qualquer novo domínio/subdomínio que precise acessar a API.
+_ALLOWED_ORIGINS = [
+    "https://speedio.leanttro.com",
+    "https://leanttro.com",
+    "https://www.leanttro.com",
+    "https://admin.leanttro.com",
+    # Desenvolvimento local — remova em produção se quiser restringir
+    "http://localhost:3000",
+    "http://localhost:5173",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"])
+    allow_headers=["*"],
+)
 
 # ─────────────────────────────────────────
 #  AUTH ROUTES
@@ -1171,13 +1186,35 @@ class AdminPlanoBody(BaseModel):
 @app.get("/admin/usuarios")
 def admin_listar_usuarios(x_admin_token: str = "", conn=Depends(get_db)):
     check_admin(x_admin_token)
-    rows = db_all(conn, """
-        SELECT u.id, u.nome, u.email, u.ativo, u.criado_em,
-               p.nome as plano_nome
-        FROM usuarios u
-        LEFT JOIN planos p ON p.id = u.plano_id
-        ORDER BY u.criado_em DESC
-    """)
+    # Verifica se a tabela planos existe antes de fazer o JOIN.
+    # Se não existir, retorna plano_nome como NULL em vez de dar 500.
+    # ── Migration necessária (rode uma vez no banco) ──────────────────────
+    # CREATE TABLE IF NOT EXISTS planos (
+    #     id   SERIAL PRIMARY KEY,
+    #     nome TEXT NOT NULL UNIQUE
+    # );
+    # INSERT INTO planos (nome) VALUES ('Free'),('Pro'),('Enterprise')
+    #     ON CONFLICT (nome) DO NOTHING;
+    # ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS plano_id INTEGER REFERENCES planos(id);
+    # ─────────────────────────────────────────────────────────────────────
+    tabela_planos_existe = db_one(conn,
+        "SELECT 1 FROM information_schema.tables WHERE table_name = 'planos' AND table_schema = 'public'"
+    )
+    if tabela_planos_existe:
+        rows = db_all(conn, """
+            SELECT u.id, u.nome, u.email, u.ativo, u.criado_em,
+                   COALESCE(p.nome, 'Free') as plano_nome
+            FROM usuarios u
+            LEFT JOIN planos p ON p.id = u.plano_id
+            ORDER BY u.criado_em DESC
+        """)
+    else:
+        rows = db_all(conn, """
+            SELECT id, nome, email, ativo, criado_em,
+                   'Free' as plano_nome
+            FROM usuarios
+            ORDER BY criado_em DESC
+        """)
     return [dict(r) for r in rows]
 
 @app.post("/admin/usuarios")
