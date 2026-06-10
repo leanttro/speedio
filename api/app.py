@@ -1202,7 +1202,7 @@ def admin_listar_usuarios(x_admin_token: str = "", conn=Depends(get_db)):
     )
     if tabela_planos_existe:
         rows = db_all(conn, """
-            SELECT u.id, u.nome, u.email, u.ativo, u.criado_em,
+            SELECT u.id, u.nome, u.email, u.ativo, u.created_at as criado_em,
                    COALESCE(p.nome, 'Free') as plano_nome
             FROM usuarios u
             LEFT JOIN planos p ON p.id = u.plano_id
