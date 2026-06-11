@@ -817,6 +817,7 @@ app = FastAPI(title="Prospector IA", version="1.0.0", lifespan=lifespan)
 _ALLOWED_ORIGINS = [
     "https://speedio.leanttro.com",
     "https://jobi.leanttro.com",
+    "https://kard.leanttro.com",
     "https://leanttro.com",
     "https://www.leanttro.com",
     "https://admin.leanttro.com",
