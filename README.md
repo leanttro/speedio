@@ -8,7 +8,83 @@ Sistema completo de prospecção e vendas automatizadas via WhatsApp com intelig
 
 O **Prospector IA** é uma plataforma SaaS que automatiza todo o funil de prospecção B2B via WhatsApp. A IA entra em contato com leads, mantém conversas de vendas contextualizadas, executa follow-ups automáticos e enriquece dados de empresas via CNPJ — tudo sem intervenção manual.
 
-Desenvolvido como projeto técnico full-stack, o sistema integra backend Python (FastAPI), frontend React e infraestrutura dockerizada com PostgreSQL, Redis e Baileys (WhatsApp).
+Desenvolvido como projeto técnico full-stack, o sistema integra frontend React e backend distribuído em **Google Cloud Functions** (Python 3.11), com PostgreSQL, Redis e Baileys (WhatsApp).
+
+---
+
+## Arquitetura — Migração para Cloud Functions
+
+O backend foi refatorado de um único `app.py` (FastAPI monolítico) para uma arquitetura serverless distribuída no **Google Cloud Functions**. Cada domínio virou uma função independente, com deploy e escalabilidade separados.
+
+```
+┌──────────────┐     ┌─────────────────────────────────────────┐
+│   Frontend   │────▶│           Google Cloud Functions         │
+│   (React)    │     │                                         │
+└──────────────┘     │  auth │ contacts │ campaigns │ webhook  │
+                     │  conversations │ config │ analytics     │
+                     │  followups (Pub/Sub + Cloud Scheduler)  │
+                     └──────────────┬──────────────────────────┘
+                                    │
+                          ┌─────────┼──────────┐
+                          ▼         ▼          ▼
+                    ┌──────────┐ ┌───────┐ ┌────────┐
+                    │PostgreSQL│ │ Groq  │ │Baileys │
+                    │(Contabo) │ │  API  │ │  (WA)  │
+                    └──────────┘ └───────┘ └────────┘
+```
+
+### Por que Cloud Functions?
+
+- **Escalabilidade automática** — cada função escala independentemente
+- **Sem servidor para gerenciar** — infraestrutura 100% gerenciada pelo GCP
+- **Custo zero em baixo volume** — 2 milhões de invocações/mês no free tier
+- **Follow-ups via Pub/Sub + Cloud Scheduler** — substitui o worker em loop infinito por um trigger a cada 15 minutos, muito mais eficiente
+
+### Status do deploy
+
+O código está 100% estruturado e pronto para deploy. O deploy em produção está pendente de ativação do billing no GCP (pré-pagamento reembolsável de R$50). Os comandos de deploy estão documentados nos comentários de cada `main.py`.
+
+---
+
+## Estrutura do Projeto
+
+```
+prospector-ia/
+├── functions/
+│   ├── auth/
+│   │   ├── main.py           # POST /register, POST /login, GET /me
+│   │   └── requirements.txt
+│   ├── contacts/
+│   │   ├── main.py           # CRUD contatos + import CSV
+│   │   └── requirements.txt
+│   ├── campaigns/
+│   │   ├── main.py           # CRUD campanhas + enfileiramento Redis
+│   │   └── requirements.txt
+│   ├── conversations/
+│   │   ├── main.py           # Listagem, mensagens, modo IA/manual, envio manual
+│   │   └── requirements.txt
+│   ├── config/
+│   │   ├── main.py           # Configuração IA, chave Groq, status WhatsApp, QR code
+│   │   └── requirements.txt
+│   ├── analytics/
+│   │   ├── main.py           # Métricas totais + histórico diário
+│   │   └── requirements.txt
+│   ├── webhook/
+│   │   ├── main.py           # Coração da IA: recebe mensagem Baileys → chama Groq → responde
+│   │   └── requirements.txt
+│   ├── followups/
+│   │   ├── main.py           # Worker Pub/Sub acionado a cada 15min pelo Cloud Scheduler
+│   │   └── requirements.txt
+│   └── shared/
+│       ├── db.py             # Conexão PostgreSQL (psycopg2)
+│       ├── auth.py           # JWT helpers
+│       ├── ia.py             # Groq API + fallback de modelos + helpers WhatsApp
+│       └── http_helpers.py   # CORS, json_response, error_response, parse_body
+├── frontend/                 # React (Dashboard)
+├── baileys/                  # Node.js — gateway WhatsApp
+├── docker-compose.yml
+└── README.md
+```
 
 ---
 
@@ -20,74 +96,24 @@ Desenvolvido como projeto técnico full-stack, o sistema integra backend Python 
 - Alternância entre **Modo IA** e **Modo Manual** por conversa
 - Histórico completo de mensagens persistido no banco
 - Suporte a mídia (imagens e vídeos) nas mensagens de abertura e fechamento
-- Reconhecimento inteligente de JID (`@s.whatsapp.net` e `@lid`) com normalização de prefixos BR
 
 ### Inteligência Artificial (Groq)
 - Integração com **Groq API** (LLaMA 3.1, LLaMA 3.3, Gemma2)
 - **Fallback automático** entre modelos — se um falhar, tenta o próximo
-- Suporte a chave Groq própria por usuário (`usar_ia_propria`)
-- Prompt de sistema totalmente customizável por usuário (persona, produto, preço, instruções)
-- Gatilhos de parada configuráveis (ex: "não quero", "para", "cancela")
-- Horário de funcionamento — IA não responde fora da janela definida
+- Suporte a chave Groq própria por usuário
+- Prompt de sistema totalmente customizável (persona, produto, preço, instruções)
+- Gatilhos de parada configuráveis
 - Delay entre mensagens configurável (simula comportamento humano)
 
 ### Campanhas
 - Criação de campanhas com lista de contatos
-- Disparo automático com velocidade configurável (intervalo em segundos)
-- **Follow-up automático** para contatos sem resposta (quantidade e intervalo configuráveis)
-- Fila assíncrona via Redis para processamento em background
-- Status por campanha: `rascunho → ativa → pausada → concluída`
-
-### Prospecção de Leads
-- Busca de empresas no **Google Maps** por nicho e cidade
-- Enriquecimento automático via **ReceitaWS** (CNPJ, porte, sócios, situação cadastral)
-- **Score de qualificação 0–100** gerado pela IA com justificativa
-- Geração de mensagem personalizada de WhatsApp por lead
-- Pipeline de status: `pendente → enriquecendo → enriquecido → score_gerado → contato_enviado → convertido/perdido`
-
-### Analytics
-- Painel de métricas diárias: mensagens enviadas, recebidas, leads abordados
-- Dados por usuário com agregação diária no banco
-
-### Chatbot NL→SQL
-- Assistente interno que responde perguntas em linguagem natural
-- Classifica automaticamente entre dúvidas sobre o sistema ou consultas de dados
-- Gera SQL seguro via IA e executa contra o banco em tempo real
-- Proteção contra comandos destrutivos (`DROP`, `DELETE`, `TRUNCATE`, etc.)
+- Disparo automático com velocidade configurável
+- **Follow-up automático** via Pub/Sub + Cloud Scheduler
+- Fila assíncrona via Redis
 
 ### Autenticação & Multi-tenant
-- Registro e login com JWT (24h de expiração)
-- Senhas com **bcrypt**
-- Sistema multi-tenant: cada usuário tem seus próprios contatos, campanhas, conversas e configurações
-- Painel admin com listagem e gestão de usuários
-
----
-
-## Arquitetura
-
-```
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│   Frontend   │────▶│   FastAPI    │────▶│  PostgreSQL  │
-│   (React)    │     │   (app.py)   │     │              │
-└──────────────┘     └──────┬───────┘     └──────────────┘
-                            │
-                  ┌─────────┼──────────┐
-                  ▼         ▼          ▼
-            ┌─────────┐ ┌───────┐ ┌────────┐
-            │  Redis  │ │ Groq  │ │Baileys │
-            │  (fila) │ │  API  │ │  (WA)  │
-            └─────────┘ └───────┘ └────────┘
-```
-
-**Backend:** Python 3.11 + FastAPI (assíncrono), tudo em um único `app.py` (backend + fila + IA unificados)
-
-**Banco de dados:** PostgreSQL com psycopg2
-
-**Fila:** Redis para processamento assíncrono de campanhas
-
-**IA:** Groq API com fallback automático entre modelos LLaMA/Gemma
-
-**WhatsApp:** Baileys (Node.js) comunicando via HTTP com o backend
+- JWT (24h), senhas com bcrypt
+- Cada usuário tem seus próprios contatos, campanhas e configurações
 
 ---
 
@@ -95,63 +121,26 @@ Desenvolvido como projeto técnico full-stack, o sistema integra backend Python 
 
 | Camada | Tecnologia |
 |--------|-----------|
-| Backend | Python 3.11, FastAPI, Uvicorn |
-| Banco de Dados | PostgreSQL, psycopg2 |
+| Backend | Python 3.11, Google Cloud Functions |
+| Banco de Dados | PostgreSQL (Contabo/Dokploy), psycopg2 |
 | Cache / Fila | Redis |
+| Agendamento | Cloud Scheduler + Pub/Sub |
 | IA | Groq API (LLaMA 3.1 / 3.3, Gemma2) |
 | WhatsApp | Baileys (Node.js) |
 | Auth | JWT (PyJWT), bcrypt |
 | HTTP Client | httpx (async) |
-| Frontend | React, React Router v6 |
-| Deploy | Docker / Docker Compose |
+| Frontend | React |
 
 ---
 
-## 📡 Principais Endpoints
+## Próximos Passos
 
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| `POST` | `/register` | Cadastro de usuário |
-| `POST` | `/login` | Autenticação JWT |
-| `GET/POST` | `/ai-config` | Configuração da IA |
-| `GET/POST` | `/contacts` | Gestão de contatos |
-| `GET/POST` | `/campaigns` | Gestão de campanhas |
-| `POST` | `/campaigns/{id}/disparar` | Disparo de campanha |
-| `GET` | `/conversations` | Listagem de conversas |
-| `POST` | `/webhook/whatsapp` | Webhook de mensagens |
-| `POST` | `/leads/buscar` | Busca leads no Maps |
-| `POST` | `/enricher/enriquecer/{id}` | Enriquecimento de lead |
-| `POST` | `/chatbot/query` | Chatbot NL→SQL |
-| `GET` | `/analytics/dashboard` | Métricas do painel |
+- [ ] Ativar billing no GCP e fazer deploy das 8 functions
+- [ ] Configurar variáveis de ambiente no GCP (DATABASE_URL, GROQ_API_KEY, BAILEYS_URL, SECRET_KEY)
+- [ ] Criar tópico Pub/Sub `followups-tick` e job no Cloud Scheduler
+- [ ] Atualizar URLs da API no frontend React
+- [ ] Testar fluxo completo em produção
 
 ---
-
-## 🔒 Segurança
-
-- Senhas armazenadas com `bcrypt`
-- Autenticação via `Bearer Token` (JWT) em todos os endpoints protegidos
-- CORS configurado para origens explícitas
-- Credenciais via variáveis de ambiente (sem hardcode)
-- Proteção contra SQL injection nas queries parametrizadas
-- Chatbot NL→SQL bloqueia comandos destrutivos no nível da aplicação
-
----
-
-## 📁 Estrutura do Projeto
-
-```
-prospector-ia/
-├── app.py              # Backend unificado (API + IA + fila)
-├── docker-compose.yml  
-├── Dockerfile          
-├── .env.example        
-└── frontend/
-    └── src/
-        ├── Dashboard.jsx
-        └── dashboard.css
-```
-
----
-
 
 Desenvolvido por **Leandro** como projeto técnico para processo seletivo na **Speedio**.
